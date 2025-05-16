@@ -8,7 +8,7 @@ class Seq2SeqModel(nn.Module):
     """Sequence-to-sequence model for transliteration."""
     
     def __init__(self, source_vocab_size, target_vocab_size, embedding_dim, hidden_size, 
-                 num_layers, dropout=0.1, rnn_type="lstm"):
+                 num_layers, dropout=0.1, rnn_type="lstm", attention=False):
         super(Seq2SeqModel, self).__init__()
         
         self.encoder = Encoder(
@@ -18,7 +18,7 @@ class Seq2SeqModel(nn.Module):
         
         self.decoder = Decoder(
             target_vocab_size, embedding_dim, hidden_size,
-            num_layers, dropout, rnn_type
+            num_layers, dropout, rnn_type, attention
         )
         
         self.target_vocab_size = target_vocab_size
@@ -32,6 +32,7 @@ class Seq2SeqModel(nn.Module):
         
         Returns:
             outputs: Decoder outputs [batch_size, target_len, target_vocab_size]
+            attention_weights: Attention weights if using attention
         """
         batch_size = source.shape[0]
         target_len = target.shape[1]
@@ -46,15 +47,20 @@ class Seq2SeqModel(nn.Module):
         # First input to the decoder is the SOS token
         decoder_input = target[:, 0].unsqueeze(1)
         decoder_hidden = encoder_hidden
-
+        
+        # Attention weights to return (if attention is used)
+        attention_weights_list = []
+        
         # Decode one step at a time
         for t in range(1, target_len):
-            decoder_output, decoder_hidden= self.decoder(
+            decoder_output, decoder_hidden, attn_weights = self.decoder(
                 decoder_input, decoder_hidden, encoder_outputs
             )
             
             # Store output and attention weights
             outputs[:, t, :] = decoder_output
+            if attn_weights is not None:
+                attention_weights_list.append(attn_weights)
             
             # Teacher forcing: use actual target token as next input
             # or use predicted token
@@ -64,7 +70,7 @@ class Seq2SeqModel(nn.Module):
                 topv, topi = decoder_output.topk(1)
                 decoder_input = topi.squeeze(-1).detach().unsqueeze(1)
         
-        return outputs
+        return outputs, attention_weights_list if attention_weights_list else None
     
     def translate(self, source, source_tokenizer, target_tokenizer, max_length=50, device="cpu"):
         """Translate a single source sequence."""
@@ -80,10 +86,11 @@ class Seq2SeqModel(nn.Module):
             decoder_hidden = encoder_hidden
             
             decoded_chars = []
+            attention_weights = []
             
             # Decode until max length or EOS token
             for _ in range(max_length):
-                decoder_output, decoder_hidden= self.decoder(
+                decoder_output, decoder_hidden, attn_weights = self.decoder(
                     decoder_input, decoder_hidden, encoder_outputs
                 )
                 
@@ -98,11 +105,14 @@ class Seq2SeqModel(nn.Module):
                 # Add token to output
                 decoded_chars.append(target_tokenizer.idx_to_char[token])
                 
+                # Save attention weights
+                if attn_weights is not None:
+                    attention_weights.append(attn_weights.squeeze().cpu().numpy())
                 
                 # Next input is the predicted token
                 decoder_input = topi.detach()
         
-        return ''.join(decoded_chars)
+        return ''.join(decoded_chars), attention_weights if attention_weights else None
     
 
 if __name__ == "__main__":
@@ -132,12 +142,13 @@ if __name__ == "__main__":
         target_vocab_size=target_vocab_size,
         embedding_dim=embedding_dim,
         hidden_size=hidden_size,
-        num_layers=num_layers
+        num_layers=num_layers,
+        attention=True
     )
     
     # Test translate function
     source_text = "abc"
-    translation= model.translate(
+    translation, attention = model.translate(
         source=source_text,
         source_tokenizer=source_tokenizer,
         target_tokenizer=target_tokenizer
@@ -145,3 +156,4 @@ if __name__ == "__main__":
     
     print(f"Source: {source_text}")
     print(f"Translation: {translation}")
+    print(f"Attention weights available: {attention is not None}")
