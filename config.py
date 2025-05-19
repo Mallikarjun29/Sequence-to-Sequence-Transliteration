@@ -1,3 +1,5 @@
+import torch
+
 class Config:
     """Configuration for the transliteration model."""
     
@@ -7,6 +9,7 @@ class Config:
         self.language = "hi"  # Hindi
         self.sos_token = "\t"
         self.eos_token = "\n"
+        self.pad_token = "_"
         
         # Model settings
         self.embedding_dim = 256
