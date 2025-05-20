@@ -1,0 +1,7 @@
+TEST SET EVALUATION RESULTS
+Character Accuracy: 0.7219
+Word Accuracy: 0.7084
+Token Accuracy: 0.6232
+Total examples: 4502
+
+Model: GRU, Layers: 3, Hidden: 256, Embedding: 256, Attention: False

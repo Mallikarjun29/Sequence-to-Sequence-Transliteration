@@ -1,0 +1,7 @@
+TEST SET EVALUATION RESULTS
+Character Accuracy: 0.7584
+Word Accuracy: 0.7480
+Token Accuracy: 0.6584
+Total examples: 4502
+
+Model: RNN, Layers: 3, Hidden: 256, Embedding: 256, Attention: True

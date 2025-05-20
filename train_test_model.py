@@ -22,7 +22,6 @@ from tqdm import tqdm
 import wandb
 from wandb import Table
 
-# Import project modules
 from model.seq2seq import Seq2SeqModel
 from data.dataset import load_data, collate_fn
 from training.trainer import Trainer
@@ -33,8 +32,8 @@ from torch.utils.data import DataLoader
 
 
 def main():
+    """Main entry point - parses arguments, loads data, trains and evaluates the model."""
     parser = argparse.ArgumentParser(description="Train and test a seq2seq model")
-    # Data parameters
     parser.add_argument("--data_path", type=str, default="",
                         help="Path to the data directory")
     parser.add_argument("--language", type=str, default="hi",
@@ -42,7 +41,6 @@ def main():
     parser.add_argument("--output_dir", type=str, default="./outputs",
                         help="Directory to save models, predictions, and visualizations")
     
-    # Model parameters
     parser.add_argument("--rnn_type", type=str, default="lstm", choices=["lstm", "gru", "rnn"],
                         help="Type of RNN cell to use")
     parser.add_argument("--hidden_size", type=int, default=256,
@@ -56,7 +54,6 @@ def main():
     parser.add_argument("--attention", action="store_true", default=False,
                         help="Whether to use attention mechanism")
     
-    # Training parameters
     parser.add_argument("--batch_size", type=int, default=64,
                         help="Batch size for training and evaluation")
     parser.add_argument("--epochs", type=int, default=10,
@@ -70,7 +67,6 @@ def main():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="Device to use for training and testing")
     
-    # Add W&B arguments
     parser.add_argument("--wandb", action="store_true", default=False,
                         help="Whether to log results to W&B")
     parser.add_argument("--wandb_entity", type=str, 
@@ -82,12 +78,9 @@ def main():
     
     args = parser.parse_args()
     
-    # Initialize W&B if enabled
     if args.wandb:
-        # Create run name based on model config
         run_name = f"{args.rnn_type}_h{args.hidden_size}_e{args.embedding_dim}_l{args.num_layers}_{'att' if args.attention else 'vanilla'}"
         
-        # Initialize W&B run
         wandb.init(
             entity=args.wandb_entity,
             project=args.wandb_project,
@@ -109,15 +102,12 @@ def main():
         )
         print(f"W&B initialized with run name: {run_name}")
     
-    # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, "models"), exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, "predictions_vanilla"), exist_ok=True)
     
-    # Create Config object
     config = Config()
     
-    # Update config with command line arguments
     config.rnn_type = args.rnn_type
     config.hidden_size = args.hidden_size
     config.embedding_dim = args.embedding_dim
@@ -131,9 +121,8 @@ def main():
     config.beam_width = args.beam_width
     config.teacher_forcing_ratio = args.teacher_forcing_ratio
     config.device = args.device
-    config.use_wandb = False  # Disable wandb for this script
+    config.use_wandb = False
     
-    # Define special tokens
     config.sos_token = "<sos>"
     config.eos_token = "<eos>"
     
@@ -141,7 +130,6 @@ def main():
     for key, value in vars(config).items():
         print(f"  {key}: {value}")
     
-    # Load datasets
     try:
         train_dataset, val_dataset, test_dataset = load_data(
             args.data_path, args.language,
@@ -153,7 +141,6 @@ def main():
         print(f"Error loading data: {e}")
         sys.exit(1)
     
-    # Create model
     model = Seq2SeqModel(
         source_vocab_size=len(train_dataset.source_tokenizer),
         target_vocab_size=len(train_dataset.target_tokenizer),
@@ -167,42 +154,32 @@ def main():
     
     print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
     
-    # Create trainer
     trainer = Trainer(model, config, train_dataset, val_dataset)
     
-    # Train model
     print("\nTraining model...")
     trainer.fit(train_dataset, val_dataset)
     
-    # Determine suffix based on attention setting
     suffix = "attention" if config.attention else "vanilla"
     
-    # Create output directories with appropriate suffix
     model_dir = os.path.join(args.output_dir, "models")
     predictions_dir = os.path.join(args.output_dir, f"predictions_{suffix}")
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(predictions_dir, exist_ok=True)
     
-    # Save the trained model with suffix
     model_path = os.path.join(model_dir, f"best_model_{suffix}.pt")
     torch.save(model.state_dict(), model_path)
     print(f"Model saved to {model_path}")
     
-    # Evaluate model on test dataset using token accuracy from Trainer
     print("\nEvaluating model on test dataset using token accuracy...")
     test_loss, test_token_accuracy = trainer.evaluate(test_dataset)
     print(f"Test Loss: {test_loss:.4f}, Test Token Accuracy: {test_token_accuracy:.4f}")
     
-    # Perform detailed evaluation with beam search
-    # This gives us word accuracy, which is what we want to prioritize
     print("\nPerforming detailed evaluation with beam search...")
     results = evaluate_with_beam_search(model, test_dataset, config)
     
-    # Save predictions to CSV
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv_path = os.path.join(predictions_dir, f"test_predictions_{suffix}_{timestamp}.csv")
     
-    # Create dataframe from results
     df = pd.DataFrame([{
         'source': item['source'],
         'target': item['target'],
@@ -211,11 +188,9 @@ def main():
         'word_acc': item['word_acc'],
     } for item in results])
     
-    # Save to CSV
     df.to_csv(csv_path, index=False)
     print(f"Predictions saved to {csv_path}")
     
-    # Calculate overall metrics
     char_accuracies = [item['char_acc'] for item in results]
     word_accuracies = [item['word_acc'] for item in results]
     
@@ -225,7 +200,6 @@ def main():
     print(f"\nOverall Character Accuracy: {avg_char_accuracy:.4f}")
     print(f"Overall Word Accuracy: {avg_word_accuracy:.4f}")
     
-    # Save metrics with suffix
     metrics_path = os.path.join(predictions_dir, f"metrics_summary_{suffix}_{timestamp}.txt")
     with open(metrics_path, 'w') as f:
         f.write(f"TEST SET EVALUATION RESULTS\n")
@@ -237,10 +211,8 @@ def main():
         f.write(f"Hidden: {config.hidden_size}, Embedding: {config.embedding_dim}, ")
         f.write(f"Attention: {config.attention}\n")
     
-    # Visualize results
     sorted_results, suffix = visualize_results(results, config, args.output_dir)
     
-    # If W&B logging is enabled, upload results
     if args.wandb:
         upload_wandb_results(sorted_results, config, suffix, test_loss, test_token_accuracy)
     
@@ -250,22 +222,28 @@ def main():
 
 
 def evaluate_with_beam_search(model, test_dataset, config):
-    """Evaluate model on test dataset using beam search for prediction"""
+    """Evaluate model on test dataset using beam search for prediction.
+    
+    Args:
+        model: The sequence-to-sequence model to evaluate
+        test_dataset: Dataset containing test examples
+        config: Configuration object with model and evaluation parameters
+        
+    Returns:
+        list: List of dictionaries containing evaluation results for each example
+    """
     device = torch.device(config.device)
     model.to(device)
     model.eval()
     
-    # Create beam search decoder
     beam_searcher = BeamSearch(model, beam_width=config.beam_width)
     
-    # Get tokenizers
     source_tokenizer = test_dataset.source_tokenizer
     target_tokenizer = test_dataset.target_tokenizer
     
-    # Create dataloader
     test_dataloader = DataLoader(
         test_dataset,
-        batch_size=16,  # Smaller batch size for evaluation
+        batch_size=16,
         shuffle=False,
         collate_fn=collate_fn
     )
@@ -274,20 +252,16 @@ def evaluate_with_beam_search(model, test_dataset, config):
     
     with torch.no_grad():
         for batch_idx, (source_tensors, target_tensors) in enumerate(tqdm(test_dataloader, desc="Evaluating")):
-            # Process each example in the batch
             for i in range(source_tensors.size(0)):
                 source_tensor = source_tensors[i].unsqueeze(0).to(device)
                 target_tensor = target_tensors[i].to(device)
                 
-                # Convert tensors to text
                 source_text = source_tokenizer.decode([token.item() for token in source_tensor.squeeze(0) if token.item() > 0])
                 target_text = target_tokenizer.decode([token.item() for token in target_tensor if token.item() > 0])
                 
-                # Skip empty examples
                 if not source_text or not target_text:
                     continue
                 
-                # Run beam search
                 beam_results = beam_searcher.translate(
                     source_text,
                     source_tokenizer,
@@ -303,11 +277,9 @@ def evaluate_with_beam_search(model, test_dataset, config):
                     score = 0.0
                     candidates = []
                 
-                # Calculate metrics
                 char_acc = character_accuracy(predicted_text, target_text)
                 word_acc = word_accuracy(predicted_text, target_text)
                 
-                # Store result
                 results.append({
                     'source': source_text,
                     'target': target_text,
@@ -322,12 +294,21 @@ def evaluate_with_beam_search(model, test_dataset, config):
 
 
 def visualize_results(results, config, output_dir):
-    """Create visualizations of the results using matplotlib and prepare W&B data"""
+    """Create visualizations of model results.
+    
+    Args:
+        results: List of dictionaries containing evaluation results
+        config: Configuration object with model parameters
+        output_dir: Directory to save visualizations
+        
+    Returns:
+        tuple: (sorted_results, suffix)
+            sorted_results: Results sorted by word accuracy
+            suffix: String suffix used for filenames (e.g., "attention" or "vanilla")
+    """
     import matplotlib.font_manager as fm
     
-    # Try to use a font that supports Devanagari
     try:
-        # Add font paths - common locations for Hindi fonts
         font_paths = [
             "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
             "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
@@ -335,7 +316,6 @@ def visualize_results(results, config, output_dir):
             "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
         ]
         
-        # Try to find a usable font
         font_found = False
         for font_path in font_paths:
             if os.path.exists(font_path):
@@ -350,22 +330,17 @@ def visualize_results(results, config, output_dir):
     except Exception as e:
         print(f"Error setting up fonts: {e}")
     
-    # Determine the suffix based on attention setting
     suffix = "attention" if config.attention else "vanilla"
     print(f"Using output suffix: {suffix}")
     
-    # Create visualizations directory with suffix
     viz_dir = os.path.join(output_dir, f"visualizations_{suffix}")
     os.makedirs(viz_dir, exist_ok=True)
     
-    # Sort results by word accuracy
     sorted_results = sorted(results, key=lambda x: x['word_acc'], reverse=True)
     
-    # Get best and worst examples
     best_examples = sorted_results[:5]
     worst_examples = sorted_results[-5:]
     
-    # Print examples to console
     print("\nBEST TRANSLATIONS:")
     print("-" * 80)
     for i, ex in enumerate(best_examples):
@@ -380,7 +355,6 @@ def visualize_results(results, config, output_dir):
         print(f"   Target: '{ex['target']}'")
         print(f"   Predicted: '{ex['predicted']}' (Word Acc: {ex['word_acc']:.2f})")
     
-    # 1. Create histogram of word accuracies
     plt.figure(figsize=(10, 6))
     sns.set_style("whitegrid")
     word_accs = [r['word_acc'] for r in results]
@@ -399,12 +373,10 @@ def visualize_results(results, config, output_dir):
     plt.savefig(os.path.join(viz_dir, f'word_accuracy_distribution_{suffix}.png'), dpi=300)
     plt.close()
     
-    # 2. Create scatter plot of character vs word accuracy
     plt.figure(figsize=(10, 6))
     sns.set_style("whitegrid")
     plt.scatter(char_accs, word_accs, alpha=0.5, s=50)
     
-    # Add trend line
     z = np.polyfit(char_accs, word_accs, 1)
     p = np.poly1d(z)
     plt.plot(sorted(char_accs), p(sorted(char_accs)), "r--", 
@@ -419,7 +391,6 @@ def visualize_results(results, config, output_dir):
     plt.savefig(os.path.join(viz_dir, f'char_vs_word_accuracy_{suffix}.png'), dpi=300)
     plt.close()
     
-    # 3. Create heatmap of word lengths vs. accuracy
     length_groups = {}
     for r in results:
         src_len = len(r['source'])
@@ -442,19 +413,15 @@ def visualize_results(results, config, output_dir):
     plt.savefig(os.path.join(viz_dir, f'accuracy_by_word_length_{suffix}.png'), dpi=300)
     plt.close()
     
-    # 4. Instead of showing text directly, use a table for examples
     fig, axs = plt.subplots(2, 1, figsize=(12, 10))
     
     def plot_examples_table(examples, ax, title):
-        # Hide axes
         ax.axis('tight')
         ax.axis('off')
         ax.set_title(title, fontsize=14)
         
-        # Create table data - avoid using actual text in visualization
         table_data = []
         for i, ex in enumerate(examples):
-            # Instead of showing the actual text, show word length and accuracy
             src_len = len(ex['source'])
             tgt_len = len(ex['target'])
             pred_len = len(ex['predicted'])
@@ -466,7 +433,6 @@ def visualize_results(results, config, output_dir):
                 f"{ex['word_acc']:.2f}"
             ])
         
-        # Create table
         colLabels = ['#', 'Source', 'Target', 'Predicted', 'Word Acc']
         table = ax.table(cellText=table_data, colLabels=colLabels, loc='center', cellLoc='center')
         table.auto_set_font_size(False)
@@ -480,7 +446,6 @@ def visualize_results(results, config, output_dir):
     plt.savefig(os.path.join(viz_dir, f'best_worst_examples_{suffix}.png'), dpi=300)
     plt.close()
     
-    # 5. Create numeric representation of character matches instead of showing text
     example_good = best_examples[0] if best_examples else None
     example_med = [r for r in results if 0.4 <= r['word_acc'] < 0.6]
     example_med = example_med[0] if example_med else None
@@ -494,7 +459,6 @@ def visualize_results(results, config, output_dir):
     if example_poor:
         examples_to_visualize.append((example_poor, "Low Accuracy Example"))
     
-    # Create character match visualization
     fig, axs = plt.subplots(len(examples_to_visualize), 1, figsize=(12, 4 * len(examples_to_visualize)))
     if len(examples_to_visualize) == 1:
         axs = [axs]
@@ -503,28 +467,24 @@ def visualize_results(results, config, output_dir):
         target = example['target']
         predicted = example['predicted']
         
-        # Create match/mismatch pattern (1 for match, 0 for mismatch)
         matches = []
         for j, char in enumerate(predicted):
             if j < len(target) and char == target[j]:
-                matches.append(1)  # Match
+                matches.append(1)
             else:
-                matches.append(0)  # Mismatch
+                matches.append(0)
         
         if not matches:
             continue
             
-        # Plot match pattern
         x_positions = np.arange(len(matches))
         colors = ['green' if m == 1 else 'red' for m in matches]
         axs[i].bar(x_positions, matches, color=colors, width=0.7)
         
-        # Add numeric labels
         for j, match in enumerate(matches):
             axs[i].text(j, 0.5, "1" if match == 1 else "0", ha='center', 
                       va='center', color='white', fontweight='bold', fontsize=14)
         
-        # Add info text (without showing the actual characters)
         word_acc = example['word_acc']
         char_acc = example['char_acc']
         axs[i].set_title(f"{title} (Word Acc: {word_acc:.2f}, Char Acc: {char_acc:.2f})\n"
@@ -545,7 +505,6 @@ def visualize_results(results, config, output_dir):
     plt.savefig(os.path.join(viz_dir, f'character_analysis_{suffix}.png'), dpi=300)
     plt.close()
     
-    # 6. Beam search visualization (without showing text directly)
     examples_with_beams = [r for r in results if len(r.get('candidates', [])) > 1]
     if examples_with_beams:
         example = next((r for r in examples_with_beams if 0.3 <= r['word_acc'] <= 0.7), examples_with_beams[0])
@@ -554,18 +513,14 @@ def visualize_results(results, config, output_dir):
         plt.figure(figsize=(12, 6))
         sns.set_style("whitegrid")
         
-        # Instead of showing text, show candidate lengths and similarity scores
         y_positions = np.arange(len(candidates))
         candidate_lengths = [len(cand) for cand in candidates]
         
-        # Calculate similarity between candidates
         similarities = []
         for i, cand in enumerate(candidates):
-            # Similarity to target
-            if i == 0:  # first candidate is the selected one
+            if i == 0:
                 sim = example['word_acc']
             else:
-                # Calculate similarity to first candidate as placeholder
                 common = 0
                 for j in range(min(len(cand), len(candidates[0]))):
                     if cand[j] == candidates[0][j]:
@@ -573,12 +528,10 @@ def visualize_results(results, config, output_dir):
                 sim = common / max(len(cand), len(candidates[0])) if max(len(cand), len(candidates[0])) > 0 else 0
             similarities.append(sim)
         
-        # Create bars for candidate lengths and similarity
         plt.barh(y_positions, candidate_lengths, alpha=0.4, color='blue', label='Length')
         plt.barh(y_positions, [sim * max(candidate_lengths) for sim in similarities], 
                 alpha=0.6, color='green', label='Similarity')
         
-        # Add labels
         for i, (length, sim) in enumerate(zip(candidate_lengths, similarities)):
             plt.text(0.5, i, f"Length: {length}, Sim: {sim:.2f}", va='center', fontsize=10)
             if i == 0:
@@ -592,7 +545,6 @@ def visualize_results(results, config, output_dir):
         plt.savefig(os.path.join(viz_dir, f'beam_search_candidates_{suffix}.png'), dpi=300)
         plt.close()
     
-    # 7. Model performance summary
     avg_word_acc = np.mean(word_accs)
     avg_char_acc = np.mean(char_accs)
     perfect_count = sum(1 for acc in word_accs if acc == 1.0)
@@ -639,10 +591,16 @@ def visualize_results(results, config, output_dir):
     return sorted_results, suffix
 
 
-# Add new function to upload results to W&B
 def upload_wandb_results(results, config, suffix, test_loss, test_token_accuracy):
-    """Upload results and visualizations to W&B"""
-    # Get overall metrics
+    """Upload results and visualizations to Weights & Biases.
+    
+    Args:
+        results: List of dictionaries containing evaluation results
+        config: Configuration object with model parameters
+        suffix: String suffix used in filenames ("attention" or "vanilla")
+        test_loss: Test loss value
+        test_token_accuracy: Token accuracy on test set
+    """
     word_accs = [r['word_acc'] for r in results]
     char_accs = [r['char_acc'] for r in results]
     avg_word_acc = np.mean(word_accs)
@@ -650,18 +608,16 @@ def upload_wandb_results(results, config, suffix, test_loss, test_token_accuracy
     perfect_count = sum(1 for acc in word_accs if acc == 1.0)
     perfect_percent = perfect_count / len(results) * 100 if results else 0
     
-    # Log top-level metrics
     wandb.log({
         "test_loss": test_loss,
         "test_token_accuracy": test_token_accuracy,
-        "test_char_accuracy": avg_char_acc,  # Fixed: was avg_char_accuracy
-        "test_word_accuracy": avg_word_acc,  # Fixed: was avg_word_accuracy
+        "test_char_accuracy": avg_char_acc,
+        "test_word_accuracy": avg_word_acc,
         "perfect_predictions_percent": perfect_percent
     })
     
-    # 1. Create table for best examples
     sorted_results = sorted(results, key=lambda x: x['word_acc'], reverse=True)
-    best_examples = sorted_results[:10]  # Show top 10 examples
+    best_examples = sorted_results[:10]
     
     best_table = wandb.Table(columns=["Source", "Target", "Predicted", "Character Accuracy", "Word Accuracy"])
     for ex in best_examples:
@@ -673,8 +629,7 @@ def upload_wandb_results(results, config, suffix, test_loss, test_token_accuracy
             ex['word_acc']
         )
     
-    # 2. Create table for worst examples
-    worst_examples = sorted_results[-10:]  # Show bottom 10 examples
+    worst_examples = sorted_results[-10:]
     
     worst_table = wandb.Table(columns=["Source", "Target", "Predicted", "Character Accuracy", "Word Accuracy"])
     for ex in worst_examples:
@@ -686,7 +641,6 @@ def upload_wandb_results(results, config, suffix, test_loss, test_token_accuracy
             ex['word_acc']
         )
     
-    # Upload all visualizations from directory if it exists
     viz_dir = os.path.join(config.output_dir if hasattr(config, 'output_dir') else "outputs", 
                           f"visualizations_{suffix}")
     
@@ -696,13 +650,13 @@ def upload_wandb_results(results, config, suffix, test_loss, test_token_accuracy
                 file_path = os.path.join(viz_dir, file)
                 wandb.log({f"visualization/{file}": wandb.Image(file_path)})
     
-    # Log the tables
     wandb.log({
         f"best_examples_{suffix}": best_table,
         f"worst_examples_{suffix}": worst_table
     })
     
     print("Results and visualizations uploaded to W&B")
+
 
 if __name__ == "__main__":
     main()

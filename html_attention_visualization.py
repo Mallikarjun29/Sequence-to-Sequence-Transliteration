@@ -7,18 +7,14 @@ from pathlib import Path
 import argparse
 import pandas as pd
 
-# Add root directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import directly from comparison.py for consistent model loading and inference
 try:
-    # Import the comparison module
     from comparison import generate_attention_map
 except ImportError:
     print("Error: Could not import from comparison.py. Make sure the file exists in the project.")
     sys.exit(1)
 
-# Import project modules - using same imports as comparison.py
 try:
     from model.seq2seq import Seq2SeqModel
     from data.dataset import load_data, collate_fn
@@ -28,7 +24,12 @@ except ImportError:
 
 
 def create_html_visualization(examples_results, output_path):
-    """Create HTML visualization of attention weights"""
+    """Create HTML visualization of attention weights.
+    
+    Args:
+        examples_results (list): List of examples with attention weights.
+        output_path (str): Path to save the HTML visualization file.
+    """
     
     html_template = """
     <!DOCTYPE html>
@@ -252,15 +253,12 @@ def create_html_visualization(examples_results, output_path):
     </html>
     """
     
-    # Convert examples to a format suitable for JavaScript
     examples_json = []
     for example in examples_results:
-        # Extract fields from example dictionary
         source_text = example['source']
         predicted_text = example['predicted_attention']
         attention_weights = example['attention_weights']
         
-        # Convert numpy arrays to lists for JSON serialization
         attention_weights_list = [weights.tolist() for weights in attention_weights]
         
         example_data = {
@@ -270,10 +268,8 @@ def create_html_visualization(examples_results, output_path):
         }
         examples_json.append(example_data)
     
-    # Replace the placeholder with actual JSON data
     final_html = html_template.replace('EXAMPLES_JSON', json.dumps(examples_json))
     
-    # Write to file
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(final_html)
     
@@ -281,16 +277,24 @@ def create_html_visualization(examples_results, output_path):
 
 
 def load_model_predictions(predictions_dir, model_type):
-    """Load model predictions from CSV file - exactly as in comparison.py"""
-    # Find the most recent predictions file for this model type
+    """Load model predictions from CSV file.
+    
+    Args:
+        predictions_dir (str): Directory containing prediction files.
+        model_type (str): Type of model ("vanilla" or "attention").
+        
+    Returns:
+        DataFrame: Loaded prediction data.
+        
+    Raises:
+        FileNotFoundError: If no prediction files found for the model type.
+    """
     files = [f for f in os.listdir(predictions_dir) if f.startswith(f"test_predictions_{model_type}")]
     if not files:
         raise FileNotFoundError(f"No prediction files found for {model_type} model.")
     
-    # Sort by timestamp (assuming format: test_predictions_TYPE_TIMESTAMP.csv)
     files.sort(key=lambda x: x.split('_')[-1].split('.')[0], reverse=True)
     
-    # Load the most recent file
     csv_path = os.path.join(predictions_dir, files[0])
     df = pd.read_csv(csv_path)
     
@@ -299,29 +303,34 @@ def load_model_predictions(predictions_dir, model_type):
 
 
 def find_error_corrections(vanilla_df, attention_df):
-    """Find examples where attention model corrected errors made by vanilla model - exactly as in comparison.py"""
-    # Merge dataframes on source and target
+    """Find examples where attention model corrected errors made by vanilla model.
+    
+    Args:
+        vanilla_df (DataFrame): Predictions from vanilla model.
+        attention_df (DataFrame): Predictions from attention model.
+        
+    Returns:
+        tuple: (corrections, improvements, examples)
+            corrections: DataFrame with complete error corrections
+            improvements: DataFrame with significant improvements
+            examples: List of example dictionaries for visualization
+    """
     merged_df = pd.merge(vanilla_df, attention_df, 
                          on=['source', 'target'], 
                          suffixes=('_vanilla', '_attention'))
     
-    # Find instances where vanilla was wrong and attention was right
     corrections = merged_df[(merged_df['word_acc_vanilla'] < 1.0) & (merged_df['word_acc_attention'] == 1.0)]
     
-    # Find instances where attention significantly improved over vanilla
     improvements = merged_df[(merged_df['word_acc_attention'] - merged_df['word_acc_vanilla'] >= 0.5)]
     
-    # Sort by improvement magnitude
     improvements = improvements.sort_values(by='word_acc_vanilla', ascending=True)
     
     print(f"\nFound {len(corrections)} complete error corrections (vanilla wrong, attention correct)")
     print(f"Found {len(improvements)} significant improvements (word_acc diff ≥ 0.5)")
     
-    # Combine and take at most 10 examples - using dataframe operations
     examples_df = pd.concat([corrections.head(5), improvements.head(5)]).drop_duplicates()
-    examples_df = examples_df.head(10)  # Limit to 10 examples
+    examples_df = examples_df.head(10)
     
-    # Convert to list of dictionaries for easier handling
     examples = examples_df.to_dict('records')
     
     for i, row in enumerate(examples):
@@ -336,8 +345,16 @@ def find_error_corrections(vanilla_df, attention_df):
 
 
 def load_model_and_generate_attention_maps(config, examples, output_dir):
-    """Load attention model and generate attention maps for examples - based on comparison.py"""
-    # Create directory for attention visualizations
+    """Load attention model and generate attention maps for examples.
+    
+    Args:
+        config: Model configuration.
+        examples (list): List of example dictionaries.
+        output_dir (str): Output directory for visualizations.
+        
+    Returns:
+        list: Examples with attention weights added.
+    """
     attn_dir = os.path.join(output_dir, "attention_visualizations")
     os.makedirs(attn_dir, exist_ok=True)
     
@@ -345,7 +362,6 @@ def load_model_and_generate_attention_maps(config, examples, output_dir):
     print(f"GENERATING ATTENTION VISUALIZATIONS USING {config.rnn_type.upper()} MODEL")
     print("="*50)
     
-    # Load datasets to get tokenizers
     try:
         train_dataset, _, _ = load_data(
             config.data_path, config.language,
@@ -358,7 +374,6 @@ def load_model_and_generate_attention_maps(config, examples, output_dir):
         print(f"Error loading data: {e}")
         sys.exit(1)
     
-    # Create model with attention and specific RNN type - exactly as in comparison.py
     model = Seq2SeqModel(
         source_vocab_size=len(source_tokenizer),
         target_vocab_size=len(target_tokenizer),
@@ -373,55 +388,46 @@ def load_model_and_generate_attention_maps(config, examples, output_dir):
     print(f"Model created with: {model.encoder.num_layers} encoder layers and {model.decoder.num_layers} decoder layers")
     print(f"Hidden size: {config.hidden_size}, RNN type: {config.rnn_type}")
     
-    # Load best model weights - exactly as in comparison.py
     model_path = os.path.join(output_dir, "models", "best_model_attention.pt")
     if not os.path.exists(model_path):
         print(f"Error: Attention model checkpoint not found at {model_path}")
         return None
     
     try:
-        # Try loading with weights_only=True first
         model.load_state_dict(torch.load(model_path, weights_only=True))
         print(f"Loaded attention model from {model_path} with weights_only=True")
     except Exception as e1:
         try:
-            # If that fails, try the default loading method
             model.load_state_dict(torch.load(model_path))
             print(f"Loaded attention model from {model_path}")
         except Exception as e2:
             print(f"Error loading model: {e2}")
             return None
     
-    # Set model to evaluation mode and move to device
     device = torch.device(config.device)
     model.eval()
     model.to(device)
     
-    # Process each example to add attention weights
     for example in examples:
-        # Generate attention weights for this example
         source_text = example['source']
         
-        # Get source tokens
         source_tokens = source_tokenizer.encode(source_text)
         source_tensor = torch.tensor(source_tokens).unsqueeze(0).to(device)
         
-        # Forward pass with attention capture
         attention_weights = generate_attention_map(model, source_tensor, target_tokenizer, device)
         
-        # Skip if attention weights could not be generated
         if attention_weights is None:
             print(f"Could not generate attention weights for '{source_text}'")
             example['attention_weights'] = []
             continue
         
-        # Store attention weights in the example
         example['attention_weights'] = attention_weights
     
     return examples
 
 
 def main():
+    """Main function to create HTML attention visualizations."""
     parser = argparse.ArgumentParser(description="Create HTML attention visualization")
     parser.add_argument("--output_dir", type=str, default="./outputs",
                         help="Directory containing models and predictions")
@@ -434,10 +440,8 @@ def main():
     
     args = parser.parse_args()
     
-    # Create output directory
     os.makedirs(os.path.join(args.output_dir, "attention_visualizations"), exist_ok=True)
     
-    # Create config object just like in comparison.py
     class Config:
         def __init__(self):
             self.rnn_type = "rnn"
@@ -460,7 +464,6 @@ def main():
     config = Config()
     print(f"Using device: {config.device}")
     
-    # Step 1: Load predictions for vanilla and attention models
     try:
         print("\nLoading model predictions...")
         vanilla_df = load_model_predictions(os.path.join(args.output_dir, "predictions_vanilla"), "vanilla")
@@ -469,7 +472,6 @@ def main():
         print(f"Error loading predictions: {e}")
         sys.exit(1)
     
-    # Step 2: Find examples where attention model improved over vanilla model
     print("\nFinding examples with significant improvements...")
     corrections, improvements, examples = find_error_corrections(vanilla_df, attention_df)
     
@@ -477,7 +479,6 @@ def main():
         print("No examples found with significant improvements.")
         sys.exit(1)
     
-    # Step 3: Generate attention maps for these examples
     print("\nGenerating attention maps...")
     examples_with_attention = load_model_and_generate_attention_maps(config, examples, args.output_dir)
     
@@ -485,11 +486,9 @@ def main():
         print("Could not generate attention maps for examples.")
         sys.exit(1)
     
-    # Step 4: Create HTML visualization
     html_path = os.path.join(args.output_dir, "attention_visualizations", "attention_visualization.html")
     create_html_visualization(examples_with_attention, html_path)
     
-    # Open HTML file in browser
     try:
         import webbrowser
         webbrowser.open(f"file://{os.path.abspath(html_path)}")

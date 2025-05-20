@@ -1,9 +1,14 @@
 import torch
 
 class Config:
-    """Configuration for the transliteration model."""
+    """Configuration for the transliteration model.
+    
+    This class contains all the configuration parameters for data,
+    model architecture, training, and evaluation settings.
+    """
     
     def __init__(self):
+        """Initialize configuration with default values."""
         # Data settings
         self.data_path = "./data"
         self.language = "hi"  # Hindi

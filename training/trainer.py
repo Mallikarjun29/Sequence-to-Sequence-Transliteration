@@ -5,36 +5,45 @@ import time
 import numpy as np
 from torch.utils.data import DataLoader
 import wandb
-# Assuming collate_fn is defined and imported correctly in your project setup.
-from data.dataset import collate_fn # Example import
-
-# Removed imports for BeamSearch and other metrics as they are no longer used for per-epoch evaluation
-from data.tokenizer import CharTokenizer # Import CharTokenizer to access special token methods
+from data.dataset import collate_fn
+from data.tokenizer import CharTokenizer
 
 class Trainer:
     """Trainer for sequence-to-sequence model with per-epoch evaluation."""
 
-    def __init__(self, model, config, train_dataset, val_dataset): # Added datasets to init
+    def __init__(self, model, config, train_dataset, val_dataset):
+        """Initialize the trainer.
+        
+        Args:
+            model: The sequence-to-sequence model to train.
+            config: Training configuration with hyperparameters.
+            train_dataset: Dataset for training.
+            val_dataset: Dataset for validation.
+        """
         self.model = model
         self.config = config
         self.device = torch.device(config.device)
         self.model.to(self.device)
-         # Ignore padding tokens (assuming 0 is PAD ID)
         self.optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
         self.stats = []
 
-        # Store datasets and tokenizers for evaluation (needed for pad_id)
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
-        self.source_tokenizer = train_dataset.source_tokenizer # Access tokenizers from dataset
+        self.source_tokenizer = train_dataset.source_tokenizer
         self.target_tokenizer = train_dataset.target_tokenizer
-        self.pad_token_id = self.target_tokenizer.pad_id() # Get padding ID
-        self.criterion = nn.CrossEntropyLoss(ignore_index=self.pad_token_id) 
-        # BeamSearch is no longer initialized here as it's not used for per-epoch evaluation metrics
+        self.pad_token_id = self.target_tokenizer.pad_id()
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.pad_token_id)
 
 
     def train_epoch(self, dataloader):
-        """Train for one epoch."""
+        """Train for one epoch.
+        
+        Args:
+            dataloader: DataLoader containing training data.
+            
+        Returns:
+            float: Average loss for the epoch.
+        """
         self.model.train()
         total_loss = 0
 
@@ -74,7 +83,14 @@ class Trainer:
         return total_loss / len(dataloader)
 
     def evaluate_loss_and_accuracy(self, dataloader):
-        """Calculate loss and token accuracy.""" # Renamed for clarity
+        """Calculate loss and token accuracy.
+        
+        Args:
+            dataloader: DataLoader containing evaluation data.
+            
+        Returns:
+            tuple: (average loss, token accuracy)
+        """
         self.model.eval()
         total_loss = 0
         correct_tokens = 0
@@ -114,11 +130,16 @@ class Trainer:
         avg_loss = total_loss / len(dataloader)
         token_accuracy = correct_tokens / total_tokens if total_tokens > 0 else 0.0
 
-        return avg_loss, token_accuracy # Return both loss and accuracy
+        return avg_loss, token_accuracy
 
 
     def fit(self, train_dataset, val_dataset):
-        """Train the model."""
+        """Train the model.
+        
+        Args:
+            train_dataset: Dataset for training.
+            val_dataset: Dataset for validation.
+        """
         print(f"Training on {self.device}")
 
         # Create dataloaders
@@ -188,11 +209,18 @@ class Trainer:
         print("\nModel trained successfully!")
 
     def evaluate(self, test_dataset):
-        """Evaluate the model on test data (using loss and token accuracy).""" # Updated docstring
+        """Evaluate the model on test data.
+        
+        Args:
+            test_dataset: Dataset for testing.
+            
+        Returns:
+            tuple: (test loss, test token accuracy)
+        """
         print("\nEvaluating on test set...")
         test_dataloader = DataLoader(
             test_dataset,
-            batch_size=self.config.batch_size, # Use batch size from config
+            batch_size=self.config.batch_size,
             shuffle=False,
             collate_fn=collate_fn
         )

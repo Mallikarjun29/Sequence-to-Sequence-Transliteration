@@ -4,12 +4,14 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
 def character_accuracy(pred_ids, target_ids, pad_id=0):
     """Calculate character-level accuracy for token ID sequences.
+    
     Args:
-        pred_ids: List of lists of predicted token IDs
-        target_ids: List of lists of target token IDs
-        pad_id: ID used for padding tokens (to be ignored)
+        pred_ids (list): List of lists of predicted token IDs
+        target_ids (list): List of lists of target token IDs
+        pad_id (int): ID used for padding tokens (to be ignored)
+        
     Returns:
-        Accuracy as fraction of correctly predicted non-pad tokens.
+        float: Accuracy as fraction of correctly predicted non-pad tokens.
     """
     correct = 0
     total = 0
@@ -25,11 +27,13 @@ def character_accuracy(pred_ids, target_ids, pad_id=0):
 
 def word_accuracy(pred_seqs, target_seqs):
     """Calculate exact-match sequence accuracy for decoded string sequences.
+    
     Args:
-        pred_seqs: List of decoded strings (predictions)
-        target_seqs: List of decoded strings (references)
+        pred_seqs (list): List of decoded strings (predictions)
+        target_seqs (list): List of decoded strings (references)
+        
     Returns:
-        Fraction of sequences that exactly match the reference.
+        float: Fraction of sequences that exactly match the reference.
     """
     correct = sum(1 for p, t in zip(pred_seqs, target_seqs) if p == t)
     total = len(pred_seqs)
@@ -38,21 +42,22 @@ def word_accuracy(pred_seqs, target_seqs):
 
 def bleu_score(pred_texts, target_texts):
     """Calculate character-level BLEU score for transliteration outputs.
+    
     Splits each text into a list of characters for BLEU computation.
+    
     Args:
-        pred_texts: List of predicted strings
-        target_texts: List of reference strings
+        pred_texts (list): List of predicted strings
+        target_texts (list): List of reference strings
+        
     Returns:
-        Average BLEU score over the input pairs.
+        float: Average BLEU score over the input pairs.
     """
     smoother = SmoothingFunction().method2
     scores = []
 
     for pred, tgt in zip(pred_texts, target_texts):
-        # Tokenize by character
         pred_tokens = list(pred)
         tgt_tokens = list(tgt)
-        # Compute BLEU with reference as a list of token lists
         score = sentence_bleu([tgt_tokens], pred_tokens, smoothing_function=smoother)
         scores.append(score)
 
