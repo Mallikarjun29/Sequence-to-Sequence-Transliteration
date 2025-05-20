@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
-from tokenizer import CharTokenizer
+from .tokenizer import CharTokenizer
 
 class TransliterationDataset(Dataset):
     """Dataset for transliteration task."""
@@ -59,31 +59,27 @@ def load_data(data_path, language, sos_token="\t", eos_token="\n"):
     test_path = template.format(language, language, "test")
     
     # Load dataframes
-    train_df = pd.read_csv(train_path, sep="\t", header=None)
-    val_df = pd.read_csv(val_path, sep="\t", header=None)
-    test_df = pd.read_csv(test_path, sep="\t", header=None)
-    
-    # Add start and end tokens
-    def add_tokens(text):
-        return sos_token + str(text) + eos_token
+    train_df = pd.read_csv(train_path, sep="\t", header=None, encoding="utf-8")
+    val_df = pd.read_csv(val_path, sep="\t", header=None, encoding="utf-8")
+    test_df = pd.read_csv(test_path, sep="\t", header=None, encoding="utf-8")
     
     # Process train data
-    train_source = [add_tokens(text) for text in train_df[1].astype(str)]
-    train_target = [add_tokens(text) for text in train_df[0].astype(str)]
+    train_source = [text for text in train_df[1].astype(str)]
+    train_target = [text for text in train_df[0].astype(str)]
     
     # Create dataset
     train_dataset = TransliterationDataset(train_source, train_target)
     
     # Process validation data using the same tokenizers
-    val_source = [add_tokens(text) for text in val_df[1].astype(str)]
-    val_target = [add_tokens(text) for text in val_df[0].astype(str)]
+    val_source = [text for text in val_df[1].astype(str)]
+    val_target = [text for text in val_df[0].astype(str)]
     val_dataset = TransliterationDataset(val_source, val_target, 
                                         train_dataset.source_tokenizer,
                                         train_dataset.target_tokenizer)
     
     # Process test data
-    test_source = [add_tokens(text) for text in test_df[1].astype(str)]
-    test_target = [add_tokens(text) for text in test_df[0].astype(str)]
+    test_source = [text for text in test_df[1].astype(str)]
+    test_target = [text for text in test_df[0].astype(str)]
     test_dataset = TransliterationDataset(test_source, test_target,
                                          train_dataset.source_tokenizer,
                                          train_dataset.target_tokenizer)
@@ -92,16 +88,7 @@ def load_data(data_path, language, sos_token="\t", eos_token="\n"):
 
 
 if __name__ == "__main__":
-    # This block will only run when the script is executed directly
-
-    # Define placeholder data path and language
-    # IMPORTANT: Replace 'path/to/your/dakshina_dataset' with the actual path
-    # to the downloaded Dakshina dataset on your system.
-    # Replace 'your_language_code' with the language code (e.g., 'hi' for Hindi)
-    # that you want to test.
-    # Ensure that a tokenizer.py file with a CharTokenizer class is available
-    # in the same directory or Python path.
-    data_directory = '..'  # <--- **MODIFY THIS PATH**
+    data_directory = ''  # <--- **MODIFY THIS PATH**
     language_code = 'hi' # <--- **MODIFY THIS LANGUAGE CODE if needed**
 
     print(f"Attempting to load data for language: {language_code} from {data_directory}")
@@ -109,7 +96,6 @@ if __name__ == "__main__":
     try:
         # Load the datasets
         train_dataset, val_dataset, test_dataset = load_data(data_directory, language_code)
-
         print("Data loaded successfully!")
 
         # Create DataLoaders
