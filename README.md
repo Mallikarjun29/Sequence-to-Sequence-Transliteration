@@ -1,4 +1,4 @@
-# DA6401 Assignment 3: Sequence-to-Sequence Transliteration
+# Sequence-to-Sequence Transliteration
 
 This repository contains an implementation of sequence-to-sequence models for transliteration, with both vanilla and attention-based architectures. The project is designed to transliterate text from Latin script to other writing systems, with a primary focus on Indic languages from the Dakshina dataset.
 
